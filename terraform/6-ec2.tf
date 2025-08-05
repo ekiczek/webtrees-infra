@@ -127,4 +127,6 @@ resource "aws_instance" "webtrees_instance" {
   tags = merge(var.tags, {
     Name = "webtrees-instance"
   })
+
+  depends_on = [ null_resource.upload_migrated_data ]
 }
