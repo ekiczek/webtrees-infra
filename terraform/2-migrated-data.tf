@@ -2,6 +2,7 @@ locals {
   content_types = {
     ".jpeg" : "image/jpeg"
     ".jpg" : "image/jpeg"
+    ".JPG" : "image/jpeg"
     ".mp4" : "video/mp4"
     ".png" : "image/png"
     ".zip" : "application/zip"
