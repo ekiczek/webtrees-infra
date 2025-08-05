@@ -14,6 +14,12 @@ variable "tags" {
   default     = {}
 }
 
+
+variable "ec2_ssh_key_name" {
+  description = "Name of EC2 key pair for SSH access"
+  type        = string
+}
+
 # variable "alarm_email_address" {
 #   description = "Email address for alarm alerts"
 #   type        = string
