@@ -16,6 +16,12 @@ curl -L "https://github.com/docker/compose/releases/latest/download/docker-compo
 chmod +x /usr/local/bin/docker-compose
 ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
 
+# Install AWS CLI v2
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+./aws/install
+rm -rf aws awscliv2.zip
+
 # Create directory for webtrees
 mkdir -p /home/ec2-user/webtrees
 chown ec2-user:ec2-user /home/ec2-user/webtrees
@@ -88,9 +94,59 @@ COMPOSE_EOF
 # Set ownership
 chown ec2-user:ec2-user /home/ec2-user/webtrees/docker-compose.yml
 
-# Start the containers
+# Navigate to webtrees directory
 cd /home/ec2-user/webtrees
-docker-compose up -d
+
+# Start MariaDB container first
+echo "Starting MariaDB container..."
+docker-compose up -d mariadb
+
+# Wait for MariaDB to be ready
+echo "Waiting for MariaDB to be ready..."
+until docker exec webtrees_mariadb /usr/bin/mariadb -u webtrees --password=webtrees_password -e "SELECT 1;" > /dev/null 2>&1; do
+  echo "MariaDB not ready yet, waiting 5 seconds..."
+  sleep 5
+done
+echo "MariaDB is ready!"
+
+# Check for webtrees-data.sql in S3 bucket and import if exists
+S3_BUCKET="${s3_bucket}"
+SQL_FILE="webtrees-data.sql"
+LOCAL_SQL_PATH="/home/ec2-user/webtrees/$SQL_FILE"
+
+echo "Checking for $SQL_FILE in S3 bucket $S3_BUCKET..."
+if aws s3 ls "s3://$S3_BUCKET/$SQL_FILE" > /dev/null 2>&1; then
+  echo "Found $SQL_FILE in S3 bucket. Downloading..."
+  aws s3 cp "s3://$S3_BUCKET/$SQL_FILE" "$LOCAL_SQL_PATH"
+  
+  if [ -f "$LOCAL_SQL_PATH" ]; then
+    echo "Creating webtrees database..."
+    docker exec webtrees_mariadb /usr/bin/mariadb -u webtrees --password=webtrees_password -e "CREATE DATABASE IF NOT EXISTS webtrees;"
+    
+    echo "Importing database from $SQL_FILE..."
+    docker exec -i webtrees_mariadb /usr/bin/mariadb -u webtrees --password=webtrees_password webtrees < "$LOCAL_SQL_PATH"
+    
+    if [ $? -eq 0 ]; then
+      echo "Database import successful!"
+      
+      # Clean up: delete from S3 and local
+      echo "Cleaning up: removing $SQL_FILE from S3 and local filesystem..."
+      aws s3 rm "s3://$S3_BUCKET/$SQL_FILE"
+      rm -f "$LOCAL_SQL_PATH"
+      echo "Cleanup completed."
+    else
+      echo "Database import failed!"
+    fi
+  else
+    echo "Failed to download $SQL_FILE from S3."
+  fi
+else
+  echo "No $SQL_FILE found in S3 bucket. Skipping database import."
+fi
+
+# Start webtrees container
+echo "Starting webtrees container..."
+docker-compose up -d webtrees
 
 # Create a simple status script
 cat > /home/ec2-user/webtrees/status.sh << STATUS_EOF
