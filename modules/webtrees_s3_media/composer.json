@@ -1,0 +1,17 @@
+{
+    "name": "webtrees/s3-media-module",
+    "description": "Amazon S3 Media Storage Module for webtrees",
+    "type": "library",
+    "keywords": ["webtrees", "genealogy", "s3", "media", "storage"],
+    "license": "GPL-3.0-or-later",
+    "require": {
+        "php": "^8.2",
+        "aws/aws-sdk-php": "^3.0",
+        "league/flysystem-aws-s3-v3": "^3.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "WebtreesS3Media\\": "src/"
+        }
+    }
+}

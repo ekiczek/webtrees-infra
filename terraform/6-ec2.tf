@@ -120,6 +120,12 @@ resource "aws_instance" "webtrees_instance" {
   
   security_groups = [aws_security_group.webtrees_ec2_sg.name]
   
+  root_block_device {
+    volume_size = 20
+    volume_type = "gp3"
+    encrypted   = true
+  }
+  
   user_data_base64 = base64encode(templatefile("${path.module}/user-data.sh", {
     s3_bucket = aws_s3_bucket.webtrees_media.bucket
   }))

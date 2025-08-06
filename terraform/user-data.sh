@@ -16,15 +16,27 @@ curl -L "https://github.com/docker/compose/releases/latest/download/docker-compo
 chmod +x /usr/local/bin/docker-compose
 ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
 
+# Install unzip (required for AWS CLI installation)
+dnf install -y unzip
+
 # Install AWS CLI v2
 curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-unzip awscliv2.zip
+unzip -q awscliv2.zip
 ./aws/install
 rm -rf aws awscliv2.zip
 
 # Create directory for webtrees
 mkdir -p /home/ec2-user/webtrees
 chown ec2-user:ec2-user /home/ec2-user/webtrees
+
+# Configure AWS CLI for ec2-user to use IAM role
+mkdir -p /home/ec2-user/.aws
+cat > /home/ec2-user/.aws/config << 'AWS_CONFIG_EOF'
+[default]
+region = us-east-2
+output = json
+AWS_CONFIG_EOF
+chown -R ec2-user:ec2-user /home/ec2-user/.aws
 
 # Get the public IP from instance metadata
 TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" -s)
@@ -49,8 +61,6 @@ chown ec2-user:ec2-user /home/ec2-user/webtrees/config.ini.php
 
 # Create docker-compose.yml with substituted PUBLIC_IP
 cat > /home/ec2-user/webtrees/docker-compose.yml << COMPOSE_EOF
-version: '3.8'
-
 services:
   webtrees:
     image: nathanvaughn/webtrees:latest
@@ -65,10 +75,14 @@ services:
       - DB_PASS=webtrees_password
       - DB_NAME=webtrees
       - BASE_URL=http://$${PUBLIC_IP}
+      - AWS_DEFAULT_REGION=us-east-2
+      - S3_BUCKET_NAME=${s3_bucket}
     volumes:
       - ./config.ini.php:/var/www/webtrees/data/config.ini.php
+      - /home/ec2-user/webtrees/modules_v4:/var/www/webtrees/modules_v4
       - webtrees_data:/var/www/webtrees/data
       - webtrees_media:/var/www/webtrees/media
+      - /home/ec2-user/.aws:/var/www/.aws:ro
     depends_on:
       - mariadb
     restart: unless-stopped
@@ -144,9 +158,47 @@ else
   echo "No $SQL_FILE found in S3 bucket. Skipping database import."
 fi
 
+# Check for modules in S3 bucket and copy if they exist
+S3_BUCKET="${s3_bucket}"
+MODULES_PATH="modules"
+LOCAL_MODULES_PATH="/home/ec2-user/webtrees/modules_v4"
+
+echo "Checking for $MODULES_PATH in S3 bucket $S3_BUCKET..."
+if aws s3 ls "s3://$S3_BUCKET/$MODULES_PATH" > /dev/null 2>&1; then
+  echo "Found $MODULES_PATH in S3 bucket. Downloading..."
+  aws s3 cp "s3://$S3_BUCKET/$MODULES_PATH" "$LOCAL_MODULES_PATH" --recursive
+  chown -R ec2-user:ec2-user "$LOCAL_MODULES_PATH"
+
+  echo "Cleaning up: removing $MODULES_PATH from S3..."
+  aws s3 rm "s3://$S3_BUCKET/$MODULES_PATH" --recursive
+  echo "Cleanup completed."
+
+  # Programatically enable S3 module
+  docker exec webtrees_mariadb /usr/bin/mariadb -u webtrees --password=webtrees_password webtrees -e "INSERT INTO wt_module (module_name, status) VALUES ('_webtrees_s3_media_', 'enabled') ON DUPLICATE KEY UPDATE status = 'enabled';"
+  docker exec webtrees_mariadb /usr/bin/mariadb -u webtrees --password=webtrees_password webtrees -e "INSERT INTO wt_module_setting (module_name, setting_name, setting_value) VALUES ('_webtrees_s3_media_', 's3_bucket', '$S3_BUCKET') ON DUPLICATE KEY UPDATE setting_name = 's3_bucket', setting_value = '$S3_BUCKET';"
+  docker exec webtrees_mariadb /usr/bin/mariadb -u webtrees --password=webtrees_password webtrees -e "INSERT INTO wt_module_setting (module_name, setting_name, setting_value) VALUES ('_webtrees_s3_media_', 's3_enabled', '1') ON DUPLICATE KEY UPDATE setting_name = 's3_enabled', setting_value = '1';"
+  docker exec webtrees_mariadb /usr/bin/mariadb -u webtrees --password=webtrees_password webtrees -e "INSERT INTO wt_module_setting (module_name, setting_name, setting_value) VALUES ('_webtrees_s3_media_', 's3_endpoint', '') ON DUPLICATE KEY UPDATE setting_name = 's3_endpoint', setting_value = '';"
+  docker exec webtrees_mariadb /usr/bin/mariadb -u webtrees --password=webtrees_password webtrees -e "INSERT INTO wt_module_setting (module_name, setting_name, setting_value) VALUES ('_webtrees_s3_media_', 's3_key', '') ON DUPLICATE KEY UPDATE setting_name = 's3_key', setting_value = '';"
+  docker exec webtrees_mariadb /usr/bin/mariadb -u webtrees --password=webtrees_password webtrees -e "INSERT INTO wt_module_setting (module_name, setting_name, setting_value) VALUES ('_webtrees_s3_media_', 's3_media_prefix', 'media/') ON DUPLICATE KEY UPDATE setting_name = 's3_media_prefix', setting_value = 'media/';"
+  docker exec webtrees_mariadb /usr/bin/mariadb -u webtrees --password=webtrees_password webtrees -e "INSERT INTO wt_module_setting (module_name, setting_name, setting_value) VALUES ('_webtrees_s3_media_', 's3_path_style', '0') ON DUPLICATE KEY UPDATE setting_name = 's3_path_style', setting_value = '0';"
+  docker exec webtrees_mariadb /usr/bin/mariadb -u webtrees --password=webtrees_password webtrees -e "INSERT INTO wt_module_setting (module_name, setting_name, setting_value) VALUES ('_webtrees_s3_media_', 's3_region', 'us-east-2') ON DUPLICATE KEY UPDATE setting_name = 's3_region', setting_value = 'us-east-2';"
+  docker exec webtrees_mariadb /usr/bin/mariadb -u webtrees --password=webtrees_password webtrees -e "INSERT INTO wt_module_setting (module_name, setting_name, setting_value) VALUES ('_webtrees_s3_media_', 's3_secret', '') ON DUPLICATE KEY UPDATE setting_name = 's3_secret', setting_value = '';"
+else
+  echo "No $MODULES_PATH found in S3 bucket. Skipping database import."
+fi
+
 # Start webtrees container
 echo "Starting webtrees container..."
 docker-compose up -d webtrees
+
+# Install Composer and module dependencies
+docker exec webtrees bash -c "
+    curl -sS https://getcomposer.org/installer | php && 
+    mv composer.phar /usr/local/bin/composer && 
+    chmod +x /usr/local/bin/composer &&
+    cd /var/www/webtrees/modules_v4/webtrees_s3_media &&
+    composer install --no-dev --optimize-autoloader
+"
 
 # Create a simple status script
 cat > /home/ec2-user/webtrees/status.sh << STATUS_EOF
