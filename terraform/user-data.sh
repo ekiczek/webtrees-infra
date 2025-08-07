@@ -23,8 +23,15 @@ dnf install -yq unzip certbot cronie
 systemctl enable crond
 systemctl start crond
 
-# Install AWS CLI v2
-curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+# Install AWS CLI v2 (detect architecture)
+ARCH=$(uname -m)
+if [ "$ARCH" = "aarch64" ]; then
+  echo "Installing AWS CLI for ARM64 architecture..."
+  curl "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "awscliv2.zip"
+else
+  echo "Installing AWS CLI for x86_64 architecture..."
+  curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+fi
 unzip -q awscliv2.zip
 ./aws/install
 rm -rf aws awscliv2.zip

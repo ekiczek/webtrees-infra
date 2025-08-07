@@ -54,6 +54,7 @@ resource "aws_iam_instance_profile" "webtrees_profile" {
 }
 
 # Data source to get the latest Amazon Linux 2023 AMI
+# For T3 instances (x86_64)
 data "aws_ami" "amazon_linux_2023" {
   most_recent = true
   owners      = ["amazon"]
@@ -61,6 +62,22 @@ data "aws_ami" "amazon_linux_2023" {
   filter {
     name   = "name"
     values = ["al2023-ami-*-x86_64"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+}
+
+# For T4g instances (ARM64)
+data "aws_ami" "amazon_linux_2023_arm" {
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["al2023-ami-*-arm64"]
   }
 
   filter {
@@ -111,19 +128,28 @@ resource "aws_security_group" "webtrees_ec2_sg" {
   })
 }
 
-# EC2 Instance
+# T4g ARM-based instance configuration (20% cheaper than T3)
+# Uses AWS Graviton2 processors for better price-performance
+
 resource "aws_instance" "webtrees_instance" {
-  ami                  = data.aws_ami.amazon_linux_2023.id
-  instance_type        = "t3.medium"
+  # Use ARM64 AMI for T4g instances
+  ami                  = data.aws_ami.amazon_linux_2023_arm.id
+  instance_type        = "t4g.small"  # ARM-based, 2 vCPU, 2 GB RAM
+  
   key_name             = var.ec2_ssh_key_name
   iam_instance_profile = aws_iam_instance_profile.webtrees_profile.name
   
   security_groups = [aws_security_group.webtrees_ec2_sg.name]
   
   root_block_device {
-    volume_size = 20
+    volume_size = 15
     volume_type = "gp3"
     encrypted   = true
+  }
+  
+  # T4g instances support burstable performance
+  credit_specification {
+    cpu_credits = "unlimited"
   }
   
   user_data_base64 = base64encode(templatefile("${path.module}/user-data.sh", {
@@ -135,7 +161,8 @@ resource "aws_instance" "webtrees_instance" {
   }))
 
   tags = merge(var.tags, {
-    Name = "webtrees-instance"
+    Name = "webtrees-instance",
+    Architecture = "ARM64"
   })
 
   depends_on = [ null_resource.upload_migrated_data ]
