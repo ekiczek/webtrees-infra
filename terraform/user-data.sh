@@ -59,9 +59,6 @@ tblpfx="wt_"
 base_url="https://${domain_name}"
 CONFIG_EOF
 
-# Set ownership
-chown ec2-user:ec2-user /home/ec2-user/webtrees/config.ini.php
-
 # Create docker-compose.yml
 cat > /home/ec2-user/webtrees/docker-compose.yml << COMPOSE_EOF
 services:
@@ -287,4 +284,4 @@ chmod +x /home/ec2-user/webtrees/status.sh
 chown ec2-user:ec2-user /home/ec2-user/webtrees/status.sh
 
 # Re-set ownership because initial webtrees launch re-sets the permissions for some reason
-chown ec2-user:ec2-user /home/ec2-user/webtrees/config.ini.php
+# chown ec2-user:ec2-user /home/ec2-user/webtrees/config.ini.php
