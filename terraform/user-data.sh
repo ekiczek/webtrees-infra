@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Update system
-dnf update -y
+dnf update -yq
 
 # Install Docker
-dnf install -y docker
+dnf install -yq docker
 systemctl start docker
 systemctl enable docker
 
@@ -16,8 +16,12 @@ curl -L "https://github.com/docker/compose/releases/latest/download/docker-compo
 chmod +x /usr/local/bin/docker-compose
 ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
 
-# Install unzip (required for AWS CLI installation)
-dnf install -y unzip
+# Install required packages for AWS CLI, Let's Encrypt, and cron
+dnf install -yq unzip certbot cronie
+
+# Enable and start cron service
+systemctl enable crond
+systemctl start crond
 
 # Install AWS CLI v2
 curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
@@ -42,7 +46,7 @@ chown -R ec2-user:ec2-user /home/ec2-user/.aws
 TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" -s)
 PUBLIC_IP=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/public-ipv4)
 
-# Create config.ini.php
+# Create webtrees config.ini.php
 cat > /home/ec2-user/webtrees/config.ini.php << CONFIG_EOF
 ; <?php return; ?> DO NOT DELETE THIS LINE
 dbtype="mysql"
@@ -52,37 +56,45 @@ dbuser="webtrees"
 dbpass="webtrees_password"
 dbname="webtrees"
 tblpfx="wt_"
-base_url="http://$${PUBLIC_IP}"
-rewrite_urls="0"
+base_url="https://${domain_name}"
 CONFIG_EOF
 
 # Set ownership
 chown ec2-user:ec2-user /home/ec2-user/webtrees/config.ini.php
 
-# Create docker-compose.yml with substituted PUBLIC_IP
+# Create docker-compose.yml
 cat > /home/ec2-user/webtrees/docker-compose.yml << COMPOSE_EOF
 services:
+  noip-duc:
+    image: ghcr.io/noipcom/noip-duc:latest
+    container_name: noip_duc
+    environment:
+      - NOIP_USERNAME=${noip_username}
+      - NOIP_PASSWORD=${noip_password}
+      - NOIP_HOSTNAMES=${domain_name}
+    network_mode: host
+    restart: unless-stopped
+
   webtrees:
     image: nathanvaughn/webtrees:latest
     container_name: webtrees
     ports:
       - "80:80"
+      - "443:443"
     environment:
       - LANG=en_US.UTF-8
-      - DB_HOST=mariadb
-      - DB_PORT=3306
-      - DB_USER=webtrees
-      - DB_PASS=webtrees_password
-      - DB_NAME=webtrees
-      - BASE_URL=http://$${PUBLIC_IP}
       - AWS_DEFAULT_REGION=us-east-2
       - S3_BUCKET_NAME=${s3_bucket}
+      - HTTPS=1
+      - HTTPS_REDIRECT=1
+      - PRETTY_URLS=True
     volumes:
       - ./config.ini.php:/var/www/webtrees/data/config.ini.php
       - /home/ec2-user/webtrees/modules_v4:/var/www/webtrees/modules_v4
       - webtrees_data:/var/www/webtrees/data
       - webtrees_media:/var/www/webtrees/media
       - /home/ec2-user/.aws:/var/www/.aws:ro
+      - ./certs:/certs
     depends_on:
       - mariadb
     restart: unless-stopped
@@ -111,7 +123,55 @@ chown ec2-user:ec2-user /home/ec2-user/webtrees/docker-compose.yml
 # Navigate to webtrees directory
 cd /home/ec2-user/webtrees
 
-# Start MariaDB container first
+# Start No-IP DUC service first for domain updates
+echo "Starting No-IP DUC service to update ${domain_name} to point to $PUBLIC_IP..."
+if [ ! -z "${noip_username}" ] && [ ! -z "${noip_password}" ]; then
+  echo "Starting No-IP DUC service..."
+  docker-compose up -d noip-duc
+  
+  echo "Waiting 60 seconds for initial No-IP domain update..."
+  sleep 60
+else
+  echo "Warning: No-IP credentials not provided. Please manually update ${domain_name} to point to $PUBLIC_IP"
+  echo "Waiting 30 seconds before proceeding..."
+  sleep 30
+fi
+
+# Generate Let's Encrypt certificate using standalone method
+echo "Attempting Let's Encrypt certificate for ${domain_name}..."
+
+# Create certificates directory
+mkdir -p /home/ec2-user/webtrees/certs
+
+# Try to get Let's Encrypt certificate and capture the exit code
+if certbot certonly --standalone \
+  --email ${letsencrypt_email} \
+  --agree-tos \
+  --no-eff-email \
+  --domains ${domain_name} \
+  --non-interactive; then
+  
+  # Success - copy Let's Encrypt certificates
+  echo "Let's Encrypt certificate successfully generated!"
+  cp /etc/letsencrypt/live/${domain_name}/fullchain.pem /home/ec2-user/webtrees/certs/webtrees.crt
+  cp /etc/letsencrypt/live/${domain_name}/privkey.pem /home/ec2-user/webtrees/certs/webtrees.key
+  echo "Let's Encrypt certificates copied to webtrees directory."
+else
+  # Failed - fall back to self-signed certificate
+  echo "Let's Encrypt certificate generation failed (likely rate limited or DNS issues)."
+  echo "Falling back to self-signed certificate..."
+  openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+    -keyout /home/ec2-user/webtrees/certs/webtrees.key \
+    -out /home/ec2-user/webtrees/certs/webtrees.crt \
+    -subj "/C=US/ST=State/L=City/O=Webtrees/OU=IT/CN=${domain_name}"
+  echo "Self-signed certificate created. Browsers will show a security warning."
+fi
+
+chown -R ec2-user:ec2-user /home/ec2-user/webtrees/certs
+chmod 600 /home/ec2-user/webtrees/certs/webtrees.key
+chmod 644 /home/ec2-user/webtrees/certs/webtrees.crt
+
+# Start MariaDB container
 echo "Starting MariaDB container..."
 docker-compose up -d mariadb
 
@@ -145,7 +205,7 @@ if aws s3 ls "s3://$S3_BUCKET/$SQL_FILE" > /dev/null 2>&1; then
       
       # Clean up: delete from S3 and local
       echo "Cleaning up: removing $SQL_FILE from S3 and local filesystem..."
-      aws s3 rm "s3://$S3_BUCKET/$SQL_FILE"
+      # aws s3 rm "s3://$S3_BUCKET/$SQL_FILE"
       rm -f "$LOCAL_SQL_PATH"
       echo "Cleanup completed."
     else
@@ -170,7 +230,7 @@ if aws s3 ls "s3://$S3_BUCKET/$MODULES_PATH" > /dev/null 2>&1; then
   chown -R ec2-user:ec2-user "$LOCAL_MODULES_PATH"
 
   echo "Cleaning up: removing $MODULES_PATH from S3..."
-  aws s3 rm "s3://$S3_BUCKET/$MODULES_PATH" --recursive
+  # aws s3 rm "s3://$S3_BUCKET/$MODULES_PATH" --recursive
   echo "Cleanup completed."
 
   # Programatically enable S3 module
@@ -186,6 +246,10 @@ if aws s3 ls "s3://$S3_BUCKET/$MODULES_PATH" > /dev/null 2>&1; then
 else
   echo "No $MODULES_PATH found in S3 bucket. Skipping database import."
 fi
+
+# Set up automatic certificate renewal
+echo "Setting up automatic certificate renewal..."
+echo "0 12 * * * /usr/bin/certbot renew --quiet --post-hook 'cp /etc/letsencrypt/live/${domain_name}/fullchain.pem /home/ec2-user/webtrees/certs/webtrees.crt && cp /etc/letsencrypt/live/${domain_name}/privkey.pem /home/ec2-user/webtrees/certs/webtrees.key && cd /home/ec2-user/webtrees && docker-compose restart webtrees'" | crontab -
 
 # Start webtrees container
 echo "Starting webtrees container..."
@@ -207,6 +271,10 @@ echo "=== Container Status ==="
 docker-compose ps
 
 echo -e "\n=== Container Logs (last 20 lines) ==="
+echo "--- No-IP DUC ---"
+docker-compose logs --tail=20 noip_duc
+
+echo -e "\n=== Container Logs (last 20 lines) ==="
 echo "--- Webtrees ---"
 docker-compose logs --tail=20 webtrees
 
@@ -217,3 +285,6 @@ STATUS_EOF
 # Make status.sh executable and set ownership
 chmod +x /home/ec2-user/webtrees/status.sh
 chown ec2-user:ec2-user /home/ec2-user/webtrees/status.sh
+
+# Re-set ownership because initial webtrees launch re-sets the permissions for some reason
+chown ec2-user:ec2-user /home/ec2-user/webtrees/config.ini.php

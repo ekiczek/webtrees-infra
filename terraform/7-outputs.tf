@@ -1,7 +1,7 @@
 # Outputs
 output "webtrees_url" {
   description = "URL to access the webtrees application"
-  value       = "http://${aws_instance.webtrees_instance.public_ip}"
+  value       = "https://${var.domain_name}"
 }
 
 output "webtrees_ssh_command" {

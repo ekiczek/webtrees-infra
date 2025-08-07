@@ -20,6 +20,28 @@ variable "ec2_ssh_key_name" {
   type        = string
 }
 
+variable "domain_name" {
+  description = "Domain name for webtrees"
+  type        = string
+}
+
+variable "letsencrypt_email" {
+  description = "Email for Let's Encrypt notifications"
+  type        = string
+}
+
+variable "noip_username" {
+  description = "No-IP username for domain updates"
+  type        = string
+  sensitive   = true
+}
+
+variable "noip_password" {
+  description = "No-IP password for domain updates" 
+  type        = string
+  sensitive   = true
+}
+
 # variable "alarm_email_address" {
 #   description = "Email address for alarm alerts"
 #   type        = string

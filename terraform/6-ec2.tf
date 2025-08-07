@@ -114,7 +114,7 @@ resource "aws_security_group" "webtrees_ec2_sg" {
 # EC2 Instance
 resource "aws_instance" "webtrees_instance" {
   ami                  = data.aws_ami.amazon_linux_2023.id
-  instance_type        = "t3.micro"
+  instance_type        = "t3.medium"
   key_name             = var.ec2_ssh_key_name
   iam_instance_profile = aws_iam_instance_profile.webtrees_profile.name
   
@@ -128,6 +128,10 @@ resource "aws_instance" "webtrees_instance" {
   
   user_data_base64 = base64encode(templatefile("${path.module}/user-data.sh", {
     s3_bucket = aws_s3_bucket.webtrees_media.bucket
+    domain_name = var.domain_name
+    letsencrypt_email = var.letsencrypt_email
+    noip_username = var.noip_username
+    noip_password = var.noip_password
   }))
 
   tags = merge(var.tags, {
