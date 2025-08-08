@@ -259,6 +259,15 @@ echo "0 12 * * * /usr/bin/certbot renew --quiet --post-hook 'cp /etc/letsencrypt
 echo "Starting webtrees container..."
 docker-compose up -d webtrees
 
+
+
+
+echo "Disabling ImageMagick because it's been problematic. Fallback to GD..."
+docker exec webtrees bash -c "mv /usr/local/etc/php/conf.d/docker-php-ext-imagick.ini /usr/local/etc/php/conf.d/docker-php-ext-imagick.ini.bak"
+
+echo "Restarting webtrees with ImageMagick/GD fixes..."
+docker-compose restart webtrees
+
 # Install Composer and module dependencies
 docker exec webtrees bash -c "
     curl -sS https://getcomposer.org/installer | php && 
