@@ -1,12 +1,8 @@
-# variable "custom_domain" {
-#   description = "Value of the custom domain"
-#   type        = string
-# }
-
-# variable "admin_subdomain" {
-#   description = "Value of the admin subdomain"
-#   type        = string
-# }
+variable "aws_region" {
+  description = "AWS Region"
+  type        = string
+  default    = "us-east-2"
+}
 
 variable "tags" {
   description = "Tags to apply to all resources"
@@ -14,6 +10,11 @@ variable "tags" {
   default     = {}
 }
 
+variable "ec2_instance_type" {
+  description = "EC2 instance type"
+  type        = string
+  default    = "t4g.small"  # ARM-based, 2 vCPU, 2 GB RAM
+}
 
 variable "ec2_ssh_key_name" {
   description = "Name of EC2 key pair for SSH access"
@@ -42,44 +43,40 @@ variable "noip_password" {
   sensitive   = true
 }
 
-# variable "alarm_email_address" {
-#   description = "Email address for alarm alerts"
-#   type        = string
-# }
+variable "db_database_name" {
+  description = "Database name" 
+  type        = string
+  default     = "webtrees"
+}
 
-# variable "stripe_publishable_key" {
-#   description = "Stripe publishable key"
-#   type        = string
-# }
+variable "db_table_prefix" {
+  description = "Database table prefix" 
+  type        = string
+  default     = "wt_"
+}
 
-# variable "stripe_secret_key" {
-#   description = "Stripe secret key"
-#   type        = string
-# }
+variable "db_username" {
+  description = "Database username" 
+  type        = string
+  default     = "webtrees"
+  sensitive   = true
+}
 
-# variable "rclc_username" {
-#   description = "Red Cross Learning Center username"
-#   type        = string
-#   sensitive   = true
-# }
+variable "db_password" {
+  description = "Database password" 
+  type        = string
+  default     = "webtrees_password"
+  sensitive   = true
+}
 
-# variable "rclc_password" {
-#   description = "Red Cross Learning Center password"
-#   type        = string
-#   sensitive   = true
-# }
+variable "webtrees_container_tag" {
+  description = "Webtrees Docker container tag" 
+  type        = string
+  default     = "latest"
+}
 
-# variable "twilio_account_sid" {
-#   description = "Value of the Twilio SID"
-#   type        = string
-# }
-
-# variable "twilio_auth_token" {
-#   description = "Value of the Twilio auth token"
-#   type        = string
-# }
-
-# variable "twilio_phone_number" {
-#   description = "Value of the Twilio phone number"
-#   type        = string
-# }
+variable "mariadb_container_tag" {
+  description = "Webtrees Docker container tag" 
+  type        = string
+  default     = "10.11"
+}

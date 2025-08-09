@@ -70,7 +70,6 @@ data "aws_ami" "amazon_linux_2023" {
   }
 }
 
-# For T4g instances (ARM64)
 data "aws_ami" "amazon_linux_2023_arm" {
   most_recent = true
   owners      = ["amazon"]
@@ -128,13 +127,9 @@ resource "aws_security_group" "webtrees_ec2_sg" {
   })
 }
 
-# T4g ARM-based instance configuration (20% cheaper than T3)
-# Uses AWS Graviton2 processors for better price-performance
-
 resource "aws_instance" "webtrees_instance" {
-  # Use ARM64 AMI for T4g instances
   ami                  = data.aws_ami.amazon_linux_2023_arm.id
-  instance_type        = "t4g.small"  # ARM-based, 2 vCPU, 2 GB RAM
+  instance_type        = var.ec2_instance_type
   
   key_name             = var.ec2_ssh_key_name
   iam_instance_profile = aws_iam_instance_profile.webtrees_profile.name
@@ -158,6 +153,13 @@ resource "aws_instance" "webtrees_instance" {
     letsencrypt_email = var.letsencrypt_email
     noip_username = var.noip_username
     noip_password = var.noip_password
+    db_username = var.db_username
+    db_password = var.db_password
+    db_database_name = var.db_database_name
+    db_table_prefix = var.db_table_prefix
+    webtrees_container_tag = var.webtrees_container_tag
+    mariadb_container_tag = var.mariadb_container_tag
+    aws_region = var.aws_region
   }))
 
   tags = merge(var.tags, {

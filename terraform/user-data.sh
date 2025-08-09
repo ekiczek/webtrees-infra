@@ -19,7 +19,7 @@ ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
 # Install required packages for AWS CLI, Let's Encrypt, and cron
 dnf install -yq unzip certbot cronie
 
-# Enable and start cron service
+# Enable and start cron service for Let's Encrypt certificate renewal
 systemctl enable crond
 systemctl start crond
 
@@ -42,9 +42,9 @@ chown ec2-user:ec2-user /home/ec2-user/webtrees
 
 # Configure AWS CLI for ec2-user to use IAM role
 mkdir -p /home/ec2-user/.aws
-cat > /home/ec2-user/.aws/config << 'AWS_CONFIG_EOF'
+cat > /home/ec2-user/.aws/config << AWS_CONFIG_EOF
 [default]
-region = us-east-2
+region = ${aws_region}
 output = json
 AWS_CONFIG_EOF
 chown -R ec2-user:ec2-user /home/ec2-user/.aws
@@ -59,10 +59,10 @@ cat > /home/ec2-user/webtrees/config.ini.php << CONFIG_EOF
 dbtype="mysql"
 dbhost="mariadb"
 dbport="3306"
-dbuser="webtrees"
-dbpass="webtrees_password"
-dbname="webtrees"
-tblpfx="wt_"
+dbuser="${db_username}"
+dbpass="${db_password}"
+dbname="${db_database_name}"
+tblpfx="${db_table_prefix}"
 base_url="https://${domain_name}"
 CONFIG_EOF
 
@@ -80,14 +80,14 @@ services:
     restart: unless-stopped
 
   webtrees:
-    image: nathanvaughn/webtrees:latest
+    image: nathanvaughn/webtrees:${webtrees_container_tag}
     container_name: webtrees
     ports:
       - "80:80"
       - "443:443"
     environment:
       - LANG=en_US.UTF-8
-      - AWS_DEFAULT_REGION=us-east-2
+      - AWS_DEFAULT_REGION=${aws_region}
       - S3_BUCKET_NAME=${s3_bucket}
       - HTTPS=1
       - HTTPS_REDIRECT=1
@@ -104,13 +104,13 @@ services:
     restart: unless-stopped
 
   mariadb:
-    image: mariadb:10.11
+    image: mariadb:${mariadb_container_tag}
     container_name: webtrees_mariadb
     environment:
       - MYSQL_ROOT_PASSWORD=root_password
-      - MYSQL_DATABASE=webtrees
-      - MYSQL_USER=webtrees
-      - MYSQL_PASSWORD=webtrees_password
+      - MYSQL_DATABASE=${db_database_name}
+      - MYSQL_USER=${db_username}
+      - MYSQL_PASSWORD=${db_password}
     volumes:
       - mariadb_data:/var/lib/mysql
     restart: unless-stopped
@@ -181,7 +181,7 @@ docker-compose up -d mariadb
 
 # Wait for MariaDB to be ready
 echo "Waiting for MariaDB to be ready..."
-until docker exec webtrees_mariadb /usr/bin/mariadb -u webtrees --password=webtrees_password -e "SELECT 1;" > /dev/null 2>&1; do
+until docker exec webtrees_mariadb /usr/bin/mariadb -u ${db_username} --password=${db_password} -e "SELECT 1;" > /dev/null 2>&1; do
   echo "MariaDB not ready yet, waiting 5 seconds..."
   sleep 5
 done
@@ -198,11 +198,11 @@ if aws s3 ls "s3://$S3_BUCKET/$SQL_FILE" > /dev/null 2>&1; then
   aws s3 cp "s3://$S3_BUCKET/$SQL_FILE" "$LOCAL_SQL_PATH"
   
   if [ -f "$LOCAL_SQL_PATH" ]; then
-    echo "Creating webtrees database..."
-    docker exec webtrees_mariadb /usr/bin/mariadb -u webtrees --password=webtrees_password -e "CREATE DATABASE IF NOT EXISTS webtrees;"
+    echo "Creating ${db_database_name} database..."
+    docker exec webtrees_mariadb /usr/bin/mariadb -u ${db_username} --password=${db_password} -e "CREATE DATABASE IF NOT EXISTS ${db_database_name};"
     
     echo "Importing database from $SQL_FILE..."
-    docker exec -i webtrees_mariadb /usr/bin/mariadb -u webtrees --password=webtrees_password webtrees < "$LOCAL_SQL_PATH"
+    docker exec -i webtrees_mariadb /usr/bin/mariadb -u ${db_username} --password=${db_password} ${db_database_name} < "$LOCAL_SQL_PATH"
     
     if [ $? -eq 0 ]; then
       echo "Database import successful!"
@@ -233,20 +233,16 @@ if aws s3 ls "s3://$S3_BUCKET/$MODULES_PATH" > /dev/null 2>&1; then
   aws s3 cp "s3://$S3_BUCKET/$MODULES_PATH" "$LOCAL_MODULES_PATH" --recursive
   chown -R ec2-user:ec2-user "$LOCAL_MODULES_PATH"
 
-  echo "Cleaning up: removing $MODULES_PATH from S3..."
-  # aws s3 rm "s3://$S3_BUCKET/$MODULES_PATH" --recursive
-  echo "Cleanup completed."
-
   # Programatically enable S3 module
-  docker exec webtrees_mariadb /usr/bin/mariadb -u webtrees --password=webtrees_password webtrees -e "INSERT INTO wt_module (module_name, status) VALUES ('_webtrees_s3_media_', 'enabled') ON DUPLICATE KEY UPDATE status = 'enabled';"
-  docker exec webtrees_mariadb /usr/bin/mariadb -u webtrees --password=webtrees_password webtrees -e "INSERT INTO wt_module_setting (module_name, setting_name, setting_value) VALUES ('_webtrees_s3_media_', 's3_bucket', '$S3_BUCKET') ON DUPLICATE KEY UPDATE setting_name = 's3_bucket', setting_value = '$S3_BUCKET';"
-  docker exec webtrees_mariadb /usr/bin/mariadb -u webtrees --password=webtrees_password webtrees -e "INSERT INTO wt_module_setting (module_name, setting_name, setting_value) VALUES ('_webtrees_s3_media_', 's3_enabled', '1') ON DUPLICATE KEY UPDATE setting_name = 's3_enabled', setting_value = '1';"
-  docker exec webtrees_mariadb /usr/bin/mariadb -u webtrees --password=webtrees_password webtrees -e "INSERT INTO wt_module_setting (module_name, setting_name, setting_value) VALUES ('_webtrees_s3_media_', 's3_endpoint', '') ON DUPLICATE KEY UPDATE setting_name = 's3_endpoint', setting_value = '';"
-  docker exec webtrees_mariadb /usr/bin/mariadb -u webtrees --password=webtrees_password webtrees -e "INSERT INTO wt_module_setting (module_name, setting_name, setting_value) VALUES ('_webtrees_s3_media_', 's3_key', '') ON DUPLICATE KEY UPDATE setting_name = 's3_key', setting_value = '';"
-  docker exec webtrees_mariadb /usr/bin/mariadb -u webtrees --password=webtrees_password webtrees -e "INSERT INTO wt_module_setting (module_name, setting_name, setting_value) VALUES ('_webtrees_s3_media_', 's3_media_prefix', 'media/') ON DUPLICATE KEY UPDATE setting_name = 's3_media_prefix', setting_value = 'media/';"
-  docker exec webtrees_mariadb /usr/bin/mariadb -u webtrees --password=webtrees_password webtrees -e "INSERT INTO wt_module_setting (module_name, setting_name, setting_value) VALUES ('_webtrees_s3_media_', 's3_path_style', '0') ON DUPLICATE KEY UPDATE setting_name = 's3_path_style', setting_value = '0';"
-  docker exec webtrees_mariadb /usr/bin/mariadb -u webtrees --password=webtrees_password webtrees -e "INSERT INTO wt_module_setting (module_name, setting_name, setting_value) VALUES ('_webtrees_s3_media_', 's3_region', 'us-east-2') ON DUPLICATE KEY UPDATE setting_name = 's3_region', setting_value = 'us-east-2';"
-  docker exec webtrees_mariadb /usr/bin/mariadb -u webtrees --password=webtrees_password webtrees -e "INSERT INTO wt_module_setting (module_name, setting_name, setting_value) VALUES ('_webtrees_s3_media_', 's3_secret', '') ON DUPLICATE KEY UPDATE setting_name = 's3_secret', setting_value = '';"
+  docker exec webtrees_mariadb /usr/bin/mariadb -u ${db_username} --password=${db_password} ${db_database_name} -e "INSERT INTO wt_module (module_name, status) VALUES ('_webtrees_s3_media_', 'enabled') ON DUPLICATE KEY UPDATE status = 'enabled';"
+  docker exec webtrees_mariadb /usr/bin/mariadb -u ${db_username} --password=${db_password} ${db_database_name} -e "INSERT INTO wt_module_setting (module_name, setting_name, setting_value) VALUES ('_webtrees_s3_media_', 's3_bucket', '$S3_BUCKET') ON DUPLICATE KEY UPDATE setting_name = 's3_bucket', setting_value = '$S3_BUCKET';"
+  docker exec webtrees_mariadb /usr/bin/mariadb -u ${db_username} --password=${db_password} ${db_database_name} -e "INSERT INTO wt_module_setting (module_name, setting_name, setting_value) VALUES ('_webtrees_s3_media_', 's3_enabled', '1') ON DUPLICATE KEY UPDATE setting_name = 's3_enabled', setting_value = '1';"
+  docker exec webtrees_mariadb /usr/bin/mariadb -u ${db_username} --password=${db_password} ${db_database_name} -e "INSERT INTO wt_module_setting (module_name, setting_name, setting_value) VALUES ('_webtrees_s3_media_', 's3_endpoint', '') ON DUPLICATE KEY UPDATE setting_name = 's3_endpoint', setting_value = '';"
+  docker exec webtrees_mariadb /usr/bin/mariadb -u ${db_username} --password=${db_password} ${db_database_name} -e "INSERT INTO wt_module_setting (module_name, setting_name, setting_value) VALUES ('_webtrees_s3_media_', 's3_key', '') ON DUPLICATE KEY UPDATE setting_name = 's3_key', setting_value = '';"
+  docker exec webtrees_mariadb /usr/bin/mariadb -u ${db_username} --password=${db_password} ${db_database_name} -e "INSERT INTO wt_module_setting (module_name, setting_name, setting_value) VALUES ('_webtrees_s3_media_', 's3_media_prefix', 'media/') ON DUPLICATE KEY UPDATE setting_name = 's3_media_prefix', setting_value = 'media/';"
+  docker exec webtrees_mariadb /usr/bin/mariadb -u ${db_username} --password=${db_password} ${db_database_name} -e "INSERT INTO wt_module_setting (module_name, setting_name, setting_value) VALUES ('_webtrees_s3_media_', 's3_path_style', '0') ON DUPLICATE KEY UPDATE setting_name = 's3_path_style', setting_value = '0';"
+  docker exec webtrees_mariadb /usr/bin/mariadb -u ${db_username} --password=${db_password} ${db_database_name} -e "INSERT INTO wt_module_setting (module_name, setting_name, setting_value) VALUES ('_webtrees_s3_media_', 's3_region', '${aws_region}') ON DUPLICATE KEY UPDATE setting_name = 's3_region', setting_value = '${aws_region}';"
+  docker exec webtrees_mariadb /usr/bin/mariadb -u ${db_username} --password=${db_password} ${db_database_name} -e "INSERT INTO wt_module_setting (module_name, setting_name, setting_value) VALUES ('_webtrees_s3_media_', 's3_secret', '') ON DUPLICATE KEY UPDATE setting_name = 's3_secret', setting_value = '';"
 else
   echo "No $MODULES_PATH found in S3 bucket. Skipping database import."
 fi
@@ -258,9 +254,6 @@ echo "0 12 * * * /usr/bin/certbot renew --quiet --post-hook 'cp /etc/letsencrypt
 # Start webtrees container
 echo "Starting webtrees container..."
 docker-compose up -d webtrees
-
-
-
 
 echo "Disabling ImageMagick because it's been problematic. Fallback to GD..."
 docker exec webtrees bash -c "mv /usr/local/etc/php/conf.d/docker-php-ext-imagick.ini /usr/local/etc/php/conf.d/docker-php-ext-imagick.ini.bak"

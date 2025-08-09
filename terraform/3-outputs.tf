@@ -9,6 +9,11 @@ output "webtrees_ssh_command" {
   value       = "ssh ec2-user@${aws_instance.webtrees_instance.public_ip}"
 }
 
+output "webtrees_tail_cloud_init_logs" {
+  description = "SSH command to connect to the webtrees instance"
+  value       = "ssh ec2-user@${aws_instance.webtrees_instance.public_ip} 'sudo tail -f /var/log/cloud-init.log /var/log/cloud-init-output.log'"
+}
+
 output "s3_bucket_name" {
   description = "Name of the S3 bucket for webtrees media"
   value       = aws_s3_bucket.webtrees_media.bucket

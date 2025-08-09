@@ -1,0 +1,14 @@
+tags = {
+  Environment = "dev"
+  Project     = "webtrees"
+  ManagedBy   = "terraform"
+}
+
+ec2_ssh_key_name  = "my-ssh-key"
+noip_username     = "my-noip-username"
+noip_password     = "my-noip-password"
+domain_name       = "my-noip-domain-name.no-ip.org"
+letsencrypt_email = "admin@my-noip-domain-name.no-ip.org"
+
+webtrees_container_tag = "latest"
+mariadb_container_tag  = "10.11"
