@@ -208,8 +208,7 @@ if aws s3 ls "s3://$S3_BUCKET/$SQL_FILE" > /dev/null 2>&1; then
       echo "Database import successful!"
       
       # Clean up: delete from S3 and local
-      echo "Cleaning up: removing $SQL_FILE from S3 and local filesystem..."
-      # aws s3 rm "s3://$S3_BUCKET/$SQL_FILE"
+      echo "Cleaning up: removing $SQL_FILE from local filesystem..."
       rm -f "$LOCAL_SQL_PATH"
       echo "Cleanup completed."
     else
