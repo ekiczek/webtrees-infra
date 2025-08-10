@@ -55,3 +55,19 @@ resource "null_resource" "upload_module_files" {
   #   sql_file_hash = fileexists("../migrated_data/webtrees-data.sql") ? filemd5("../migrated_data/webtrees-data.sql") : "none"
   # }
 }
+
+# Upload setup scripts to S3
+resource "null_resource" "upload_scripts" {
+  provisioner "local-exec" {
+    command = "aws s3 cp scripts/ s3://${aws_s3_bucket.webtrees_media.bucket}/scripts/ --recursive"
+  }
+  
+  depends_on = [
+    aws_s3_bucket.webtrees_media,
+    aws_s3_bucket_public_access_block.webtrees_media_pab
+  ]
+  
+  triggers = {
+    script_changes = filemd5("scripts/setup-webtrees.sh")
+  }
+}

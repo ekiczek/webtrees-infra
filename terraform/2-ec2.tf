@@ -147,7 +147,7 @@ resource "aws_instance" "webtrees_instance" {
     cpu_credits = "unlimited"
   }
   
-  user_data_base64 = base64encode(templatefile("${path.module}/user-data.sh", {
+  user_data_base64 = base64encode(templatefile("${path.module}/user-data-slim.sh", {
     s3_bucket = aws_s3_bucket.webtrees_media.bucket
     domain_name = var.domain_name
     letsencrypt_email = var.letsencrypt_email
@@ -167,5 +167,8 @@ resource "aws_instance" "webtrees_instance" {
     Architecture = "ARM64"
   })
 
-  depends_on = [ null_resource.upload_migrated_data ]
+  depends_on = [ 
+    null_resource.upload_migrated_data,
+    null_resource.upload_scripts
+  ]
 }

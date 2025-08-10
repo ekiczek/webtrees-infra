@@ -80,3 +80,9 @@ variable "mariadb_container_tag" {
   type        = string
   default     = "10.11"
 }
+
+variable "alert_email" {
+  description = "Email address for CloudWatch alerts"
+  type        = string
+  default     = ""
+}

@@ -12,3 +12,5 @@ letsencrypt_email = "admin@my-noip-domain-name.no-ip.org"
 
 webtrees_container_tag = "latest"
 mariadb_container_tag  = "10.11"
+
+alert_email = "me@me.com"

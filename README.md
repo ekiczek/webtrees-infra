@@ -1,33 +1,39 @@
 # webtrees-infra
 
 ## Overview
-This project uses terraform to stand up a Webtrees website on AWS. Design goals include:
+This project uses [terraform](https://developer.hashicorp.com/terraform) to stand up a [Webtrees](https://webtrees.net/) website on [Amazon Web Services](https://aws.amazon.com/) infrastructure. Design goals include:
 * Minimize cost
 * Make it easy to migrate media files and database
 * Make it easy to upgrade Webtrees and database in the future
-* Work seemlessly with a no-cost No-IP.com domain name
+* Store media on an AWS S3 bucket for easy ongoing management of media files
+* Work seemlessly with a no-cost [No-IP.com](https://www.noip.com/) domain name
+* Serve Webtrees via https with a free Let's Encrypt certificate
 
 ## Architecture
 The system includes the following AWS infrastructure:
 * EC2 for running the No-IP DUC, Webtrees and MariaDB Docker containers
-* S3 bucket for storing media files, module for enabling Webtrees to access media files in S3, and a database dump
+* S3 bucket for storing media files, module for enabling Webtrees to access media files in S3, supporting scripts, and a database dump
+* Monitoring and alarms for EC2 and Docker containers
 
 ## Items of note
-* Uses GD instead of ImageMagick (I was having problems with ImageMagick and GD seemed more reliable for my use case)
-* `webtrees_s3_media` module was created by Claude AI
+* Uses GD instead of ImageMagick (which is installed by default). This change was made because I was having problems with ImageMagick and GD seemed more reliable for my use case.
+* `webtrees_s3_media` module was created by [Claude AI](https://claude.ai/).
 
 ## Pre-requisites/assumptions
 * You have a Webtrees database dump file and a directory of media files available to use.
-* Your AWS key and secret are in `~/.aws`.
+* Your AWS key and secret are stored locally in `~/.aws`.
 * You have Docker Desktop installed locally.
 * You are using VSCode dev containers (which utilize Docker)
 
 ## Installation and Use
 1. Open this repo in VSCode, inside of a dev container. A Docker container will be created for you on first run.
 1. Copy `terraform.tfvars.template` to `terraform.tfvars` and edit it with your values.
-1. Put the SQL dump file in the `migrated_data` directory as `webtrees-data.sql`.
+1. Create a directory named `migrated_data` and add the SQL dump file as `webtrees-data.sql` to that directory.
 1. Put the migrated media folder in the `migrated_data` directory as `media`.
 1. Open a VSCode terminal and run `terraform apply`.
+1. After the `terraform apply` is complete, check the email address provided for the `alert_email` variable and accept the subscription to alerts.
+
+The EC2 will probably need a minute or two to complete setup. Once up, you should be able to browse to the site at your domain name. Additionally, you can monitor the infrastructure health via the AWS dashboard specified in the terraform output `monitoring_dashboard_url`.
 
 ## Upgrading Docker containers
 Webtrees and MariaDB will have upgrades over time. Below are the steps for upgrading:
