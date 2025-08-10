@@ -5,6 +5,7 @@ tags = {
 }
 
 ec2_ssh_key_name  = "my-ssh-key"
+ec2_ssh_cidr      = "0.0.0.0/0"
 noip_username     = "my-noip-username"
 noip_password     = "my-noip-password"
 domain_name       = "my-noip-domain-name.no-ip.org"

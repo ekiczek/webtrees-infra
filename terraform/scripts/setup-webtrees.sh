@@ -106,6 +106,22 @@ docker exec webtrees bash -c "
     composer install --no-dev --optimize-autoloader
 " 2>/dev/null || echo "Composer setup skipped (modules may not be present)"
 
+# Configure S3 Media Module if modules are present
+if [ -d "modules_v4/webtrees_s3_media" ]; then
+  echo "Configuring S3 Media Module..."
+  # Wait a bit for webtrees to fully initialize after restart
+  sleep 10
+  
+  # Set environment variables for the configuration script
+  export AWS_REGION=$(aws configure get region 2>/dev/null || echo "us-east-2")
+  export DB_USERNAME DB_PASSWORD DB_NAME S3_BUCKET
+  
+  # Run the S3 configuration script
+  bash /home/ec2-user/webtrees/configure-s3-module.sh
+else
+  echo "S3 Media Module not found, skipping configuration..."
+fi
+
 # Setup monitoring
 bash /home/ec2-user/webtrees/cloudwatch-setup.sh
 
