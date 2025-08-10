@@ -21,6 +21,11 @@ variable "ec2_ssh_key_name" {
   type        = string
 }
 
+variable "ec2_ssh_cidr" {
+  description = "CIDR block for EC2 SSH access"
+  type        = string
+}
+
 variable "domain_name" {
   description = "Domain name for webtrees"
   type        = string
