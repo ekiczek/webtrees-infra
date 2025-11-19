@@ -86,7 +86,7 @@ if aws s3 ls "s3://$S3_BUCKET/modules" > /dev/null 2>&1; then
 fi
 
 # Set up certificate renewal
-echo "0 12 * * * /usr/bin/certbot renew --quiet --post-hook 'cp /etc/letsencrypt/live/${DOMAIN_NAME}/fullchain.pem /home/ec2-user/webtrees/certs/webtrees.crt && cp /etc/letsencrypt/live/${DOMAIN_NAME}/privkey.pem /home/ec2-user/webtrees/certs/webtrees.key && cd /home/ec2-user/webtrees && docker-compose restart webtrees'" | crontab -
+echo "0 12 * * * cd /home/ec2-user/webtrees && docker-compose stop webtrees && /usr/bin/certbot renew --quiet && docker-compose start webtrees && cp /etc/letsencrypt/live/${DOMAIN_NAME}/fullchain.pem /home/ec2-user/webtrees/certs/webtrees.crt && cp /etc/letsencrypt/live/${DOMAIN_NAME}/privkey.pem /home/ec2-user/webtrees/certs/webtrees.key && docker-compose restart webtrees" | crontab -
 
 # Start webtrees container
 echo "Starting webtrees container..."
