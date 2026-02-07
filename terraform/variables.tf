@@ -91,3 +91,9 @@ variable "alert_email" {
   type        = string
   default     = ""
 }
+
+variable "ses_domain" {
+  description = "Domain to verify in SES for sending email. When empty, SES resources are skipped."
+  type        = string
+  default     = ""
+}

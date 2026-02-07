@@ -13,11 +13,20 @@ This project uses [terraform](https://developer.hashicorp.com/terraform) to stan
 The system includes the following AWS infrastructure:
 * EC2 for running the No-IP DUC, Webtrees and MariaDB Docker containers
 * S3 bucket for storing media files, module for enabling Webtrees to access media files in S3, supporting scripts, and a database dump
+* SES for sending application emails (registration, notifications, password resets) via SMTP
 * Monitoring and alarms for EC2 and Docker containers
 
 ## Items of note
 * Uses GD instead of ImageMagick (which is installed by default). This change was made because I was having problems with ImageMagick and GD seemed more reliable for my use case.
 * `webtrees_s3_media` module was created by [Claude AI](https://claude.ai/).
+
+## Email (SES)
+Webtrees sends emails for user registration, password resets, and notifications. This project uses AWS SES as the SMTP transport. When the `ses_domain` variable is set in `terraform.tfvars`:
+* An SES domain identity is created and verified via Route 53 DNS records (TXT + DKIM)
+* A dedicated IAM user with `ses:SendRawEmail` permission is created for SMTP authentication
+* SMTP credentials are passed to the EC2 instance and configured in the Webtrees database automatically during setup
+
+Your domain must have an existing Route 53 hosted zone. If your SES account is in sandbox mode, emails can only be sent to verified addresses — request production access through the AWS console to lift this restriction.
 
 ## Pre-requisites/assumptions
 * You have a Webtrees database dump file and a directory of media files available to use.

@@ -15,3 +15,5 @@ webtrees_container_tag = "latest"
 mariadb_container_tag  = "10.11"
 
 alert_email = "me@me.com"
+
+ses_domain = ""

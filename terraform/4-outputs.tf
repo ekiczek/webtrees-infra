@@ -65,3 +65,21 @@ The backup creates:
   - s3://${aws_s3_bucket.webtrees_media.bucket}/backups/webtrees-data-TIMESTAMP.sql (archived)
   EOT
 }
+
+# SES SMTP outputs
+output "ses_smtp_endpoint" {
+  description = "SES SMTP endpoint for the configured region"
+  value       = var.ses_domain != "" ? "email-smtp.${var.aws_region}.amazonaws.com" : ""
+}
+
+output "ses_smtp_username" {
+  description = "SMTP username (IAM access key ID) for SES"
+  value       = var.ses_domain != "" ? aws_iam_access_key.ses_smtp[0].id : ""
+  sensitive   = true
+}
+
+output "ses_smtp_password" {
+  description = "SMTP password (derived from IAM secret) for SES"
+  value       = var.ses_domain != "" ? aws_iam_access_key.ses_smtp[0].ses_smtp_password_v4 : ""
+  sensitive   = true
+}
