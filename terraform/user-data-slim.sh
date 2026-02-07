@@ -150,6 +150,12 @@ export LETSENCRYPT_EMAIL="${letsencrypt_email}"
 export NOIP_USERNAME="${noip_username}"
 export NOIP_PASSWORD="${noip_password}"
 export S3_BUCKET="${s3_bucket}"
+export SMTP_HOST="${smtp_host}"
+export SMTP_PORT="${smtp_port}"
+export SMTP_USER="${smtp_user}"
+export SMTP_PASS="${smtp_pass}"
+export SMTP_FROM="${smtp_from}"
+export SMTP_HELO="${smtp_helo}"
 
 # Continue with setup
 bash setup-webtrees.sh

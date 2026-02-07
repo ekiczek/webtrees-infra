@@ -122,6 +122,14 @@ else
   echo "S3 Media Module not found, skipping configuration..."
 fi
 
+# Configure SMTP if SES credentials are provided
+if [ ! -z "${SMTP_HOST}" ] && [ ! -z "${SMTP_USER}" ]; then
+  echo "Configuring SMTP settings for SES..."
+  bash /home/ec2-user/webtrees/configure-smtp.sh
+else
+  echo "SMTP credentials not provided, skipping SMTP configuration..."
+fi
+
 # Setup monitoring
 bash /home/ec2-user/webtrees/cloudwatch-setup.sh
 

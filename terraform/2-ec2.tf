@@ -137,7 +137,7 @@ resource "aws_instance" "webtrees_instance" {
   security_groups = [aws_security_group.webtrees_ec2_sg.name]
   
   root_block_device {
-    volume_size = 15
+    volume_size = 30
     volume_type = "gp3"
     encrypted   = true
   }
@@ -160,6 +160,12 @@ resource "aws_instance" "webtrees_instance" {
     webtrees_container_tag = var.webtrees_container_tag
     mariadb_container_tag = var.mariadb_container_tag
     aws_region = var.aws_region
+    smtp_host = var.ses_domain != "" ? "email-smtp.${var.aws_region}.amazonaws.com" : ""
+    smtp_port = "587"
+    smtp_user = var.ses_domain != "" ? aws_iam_access_key.ses_smtp[0].id : ""
+    smtp_pass = var.ses_domain != "" ? aws_iam_access_key.ses_smtp[0].ses_smtp_password_v4 : ""
+    smtp_from = var.ses_domain != "" ? "noreply@${var.ses_domain}" : ""
+    smtp_helo = var.ses_domain != "" ? var.ses_domain : ""
   }))
 
   tags = merge(var.tags, {
