@@ -56,6 +56,17 @@ To start over with a clean AWS config, remove the volume with `docker volume rm 
 
 The AWS Toolkit does not retry after failing to get credentials, so after logging in, run **Developer: Reload Window** in VSCode.
 
+## OpenStreetMap tiles blocked
+OpenStreetMap's tile servers block browser requests that don't send a `Referer` header, showing an "Access blocked" tile instead of the map. webtrees 2.2.6 and earlier send `Referrer-Policy: same-origin`, which suppresses the `Referer` on tile requests. This is fixed upstream in [fisharebest/webtrees#5347](https://github.com/fisharebest/webtrees/issues/5347) but not yet in a release.
+
+As a workaround, `user-data-slim.sh` mounts `referrer-policy.conf` into the webtrees container's Apache config, which overrides the header with `strict-origin-when-cross-origin` (the browser default, which sends only the site's origin to other sites). Once a webtrees release includes the fix, the override can be removed.
+
+To apply the workaround to an instance built before this change without rebuilding it, run:
+```
+ssh ec2-user@<YOUR_IP> "docker exec webtrees bash -c 'a2enmod -q headers && echo Header set Referrer-Policy strict-origin-when-cross-origin > /etc/apache2/conf-enabled/referrer-policy.conf && apache2ctl -t && apache2ctl graceful'"
+```
+This change is lost if the container is recreated; the next EC2 rebuild picks up the permanent fix.
+
 ## Upgrading Docker containers
 Webtrees and MariaDB will have upgrades over time. Below are the steps for upgrading:
 1. Make a database backup using the backup_database_command in the terraform outputs. It's usually something like:
