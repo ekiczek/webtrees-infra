@@ -74,6 +74,22 @@ tblpfx="${db_table_prefix}"
 base_url="https://${domain_name}"
 CONFIG_EOF
 
+# Create Apache config that overrides webtrees' "Referrer-Policy: same-origin".
+# OpenStreetMap blocks tile requests that arrive without a Referer header.
+# webtrees fixed this upstream (fisharebest/webtrees#5347) after 2.2.6.
+cat > /home/ec2-user/webtrees/referrer-policy.conf << APACHE_CONF_EOF
+# The guards keep Apache starting (without the override) if a future image
+# moves mod_headers, rather than failing on a missing module.
+<IfFile /usr/lib/apache2/modules/mod_headers.so>
+  <IfModule !headers_module>
+    LoadModule headers_module /usr/lib/apache2/modules/mod_headers.so
+  </IfModule>
+</IfFile>
+<IfModule headers_module>
+  Header set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+APACHE_CONF_EOF
+
 # Create docker-compose.yml
 cat > /home/ec2-user/webtrees/docker-compose.yml << COMPOSE_EOF
 services:
@@ -107,6 +123,7 @@ services:
       - webtrees_media:/var/www/webtrees/media
       - /home/ec2-user/.aws:/var/www/.aws:ro
       - ./certs:/certs
+      - ./referrer-policy.conf:/etc/apache2/conf-enabled/referrer-policy.conf:ro
     depends_on:
       - mariadb
     restart: unless-stopped
@@ -129,7 +146,7 @@ volumes:
   mariadb_data:
 COMPOSE_EOF
 
-chown ec2-user:ec2-user /home/ec2-user/webtrees/config.ini.php /home/ec2-user/webtrees/docker-compose.yml
+chown ec2-user:ec2-user /home/ec2-user/webtrees/config.ini.php /home/ec2-user/webtrees/docker-compose.yml /home/ec2-user/webtrees/referrer-policy.conf
 
 # Download and run setup scripts
 cd /home/ec2-user/webtrees
