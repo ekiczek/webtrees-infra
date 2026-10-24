@@ -78,10 +78,16 @@ CONFIG_EOF
 # OpenStreetMap blocks tile requests that arrive without a Referer header.
 # webtrees fixed this upstream (fisharebest/webtrees#5347) after 2.2.6.
 cat > /home/ec2-user/webtrees/referrer-policy.conf << APACHE_CONF_EOF
-<IfModule !headers_module>
-  LoadModule headers_module /usr/lib/apache2/modules/mod_headers.so
+# The guards keep Apache starting (without the override) if a future image
+# moves mod_headers, rather than failing on a missing module.
+<IfFile /usr/lib/apache2/modules/mod_headers.so>
+  <IfModule !headers_module>
+    LoadModule headers_module /usr/lib/apache2/modules/mod_headers.so
+  </IfModule>
+</IfFile>
+<IfModule headers_module>
+  Header set Referrer-Policy "strict-origin-when-cross-origin"
 </IfModule>
-Header set Referrer-Policy "strict-origin-when-cross-origin"
 APACHE_CONF_EOF
 
 # Create docker-compose.yml
