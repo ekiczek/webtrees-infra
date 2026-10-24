@@ -30,7 +30,7 @@ Your domain must have an existing Route 53 hosted zone. If your SES account is i
 
 ## Pre-requisites/assumptions
 * You have a Webtrees database dump file and a directory of media files available to use.
-* Your AWS key and secret are stored locally in `~/.aws`.
+* You have an AWS IAM user with console sign-in that can be used with [`aws login`](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sign-in.html). The dev container keeps its own `~/.aws` in a named Docker volume (`webtrees-infra-aws`), separate from your host's `~/.aws`, so it survives container rebuilds.
 * You have Docker Desktop installed locally.
 * You are using VSCode dev containers (which utilize Docker)
 
@@ -43,6 +43,18 @@ Your domain must have an existing Route 53 hosted zone. If your SES account is i
 1. After the `terraform apply` is complete, check the email address provided for the `alert_email` variable and accept the subscription to alerts.
 
 The EC2 will probably need a minute or two to complete setup. Once up, you should be able to browse to the site at your domain name. Additionally, you can monitor the infrastructure health via the AWS dashboard specified in the terraform output `monitoring_dashboard_url`.
+
+## AWS login sessions
+`aws login` provides temporary credentials. The CLI refreshes them automatically, but the underlying sign-in session expires after a maximum of about 12 hours, after which you must sign in again. Symptoms of an expired session:
+* `aws` commands fail with `Your session has expired. Please reauthenticate using 'aws login'.`
+* `terraform` fails to obtain credentials.
+* The VSCode AWS Toolkit hangs on "Getting credentials for profile: default".
+
+Each time VSCode attaches to the dev container, `.devcontainer/aws-login.sh` checks the session and runs `aws login` if it has expired (or has never been set up, as on first run with an empty volume). Complete the sign-in in the browser window that opens (or open the URL printed in the startup terminal). You can also run `aws login` manually at any time in a container terminal. Logging in on your host does not affect the container, since the two use separate `~/.aws` directories.
+
+To start over with a clean AWS config, remove the volume with `docker volume rm webtrees-infra-aws` (with the container stopped) and rebuild.
+
+The AWS Toolkit does not retry after failing to get credentials, so after logging in, run **Developer: Reload Window** in VSCode.
 
 ## Upgrading Docker containers
 Webtrees and MariaDB will have upgrades over time. Below are the steps for upgrading:
