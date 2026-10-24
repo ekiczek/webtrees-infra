@@ -11,9 +11,10 @@
 		// "ghcr.io/devcontainers/features/docker-in-docker:2": {},
 		// "ghcr.io/devcontainers/features/python:1.7.1": {"version": "3.13"}
 	},
-	// Use local AWS credentials file for development
+	// Keep AWS config and `aws login` sessions in a named volume so they survive
+	// rebuilds without exposing the host's ~/.aws to the container.
     "mounts": [
-        "source=${localEnv:HOME}/.aws,target=/home/vscode/.aws,type=bind,consistency=cached"
+        "source=webtrees-infra-aws,target=/home/vscode/.aws,type=volume"
     ],
 
 	// Features to add to the dev container. More info: https://containers.dev/features.
@@ -34,7 +35,10 @@
 	// Use 'postCreateCommand' to run commands after the container is created.
 	// "postCreateCommand": "uname -a",
 	// "postCreateCommand": "pip3 install -r requirements.txt"
-	"postCreateCommand": "npm install -g @anthropic-ai/claude-code && cd terraform && terraform init"
+	"postCreateCommand": "sudo chown vscode:vscode /home/vscode/.aws && npm install -g @anthropic-ai/claude-code && cd terraform && terraform init",
+
+	// Re-run `aws login` on each attach if the session has expired.
+	"postAttachCommand": "bash .devcontainer/aws-login.sh"
 
 	// Configure tool-specific properties.
 	// "customizations": {},
